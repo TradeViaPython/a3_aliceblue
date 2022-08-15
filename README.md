@@ -33,8 +33,6 @@ Python >=3.7
 Alice Blue REST API Documentation : 
    [Alice Blue REST API Documentation](https://v2api.aliceblueonline.com)
 
-## Using the API
-
 ### Python Code Example
 ```python
 
