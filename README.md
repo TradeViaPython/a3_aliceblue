@@ -39,15 +39,19 @@ Alice Blue REST API Documentation :
 ```python
 
 ########################################################################
-api_key = "___"         # Get from https://a3.aliceblueonline.com      After Login go to "Apps" section and create API
-user_id = "___"
+# Required Details
 
-# Login
+api_key = "___"         # Get from https://a3.aliceblueonline.com      After Login go to "Apps" section and create API
+user_id = "___"         # Aliceblue login user id
+
+########################################################################
+# Login Process
+
 from AliceBlue import Alice
 
 alice = Alice(user_id=user_id, api_key=api_key)
-print(alice.create_session())           # Must "log in" to Alice platform before create session
-alice.get_master_contract()
+print(alice.create_session())       # Must "log in" to Alice platform before create session
+alice.get_master_contract()         # Download initially
 
 ########################################################################
 # Basic API Calls
