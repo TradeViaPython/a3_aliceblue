@@ -15,10 +15,10 @@ The HTTP calls have been converted to methods and JSON responses are wrapped int
 This module is installed via:
 
 ```
-# Go to "dist" folder and download "AliceBlue_V2.whl" file
-# install ".whl" file using 
+# Go to "dist" folder and download "AliceBlue_V2-1.0.0-py2.py3-none-any.whl" file
+# In terminal go to the downloaded file location and install using
 
-# "pip install AliceBlue_V2.whl"
+# "pip install AliceBlue_V2-1.0.0-py2.py3-none-any.whl"
 ```
 
 ### Prerequisites
