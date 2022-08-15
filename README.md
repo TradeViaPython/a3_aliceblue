@@ -45,7 +45,7 @@ user_id = "___"         # Aliceblue login user id
 ########################################################################
 # Login Process
 
-from AliceBlue import Alice
+from AliceBlue_V2 import Alice
 
 alice = Alice(user_id=user_id, api_key=api_key)
 print(alice.create_session())       # Must "log in" to Alice platform before create session
@@ -88,7 +88,7 @@ order = alice.place_order(transaction_type=alice.TRANSACTION_TYPE_SELL,
                           quantity=100,
                           price_type=alice.PRICE_TYPE_LIMIT,
                           product_type=alice.PRODUCT_TYPE_NRML,
-                          price=17750,
+                          price=17750.0,
                           trigger_price=None,
                           stop_loss=None,
                           square_off=None,
@@ -106,7 +106,7 @@ order = alice.modify_order(nestOrderNumber="22081300001897",
                            quantity=10,
                            price_type=alice.PRICE_TYPE_LIMIT,
                            product_type=alice.PRODUCT_TYPE_CNC,
-                           price=2227,
+                           price=2227.0,
                            trigger_price=None)
 
 print(order)
@@ -127,7 +127,7 @@ order = alice.place_order(transaction_type=alice.TRANSACTION_TYPE_BUY,
                           product_type=alice.PRODUCT_TYPE_MIS,
                           price=2633.0,
                           trigger_price=None,
-                          stop_loss=2620,
+                          stop_loss=2620.0,
                           square_off=None,
                           trailing_sl=None,
                           validity=alice.VALIDITY_DAY,
@@ -175,6 +175,5 @@ to_datetime = datetime.datetime.now()                                    # To no
 interval = "1"       # ["1", "2", "3", "4", "5", "10", "15", "30", "60", "120", "180", "240", "D", "1W", "1M"]
 indices = False      # For Getting index data
 print(alice.get_historical(instrument, from_datetime, to_datetime, interval, indices))
-
 
 ```
