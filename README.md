@@ -1,7 +1,7 @@
 
-# Official Python SDK for Alice Blue API V2
+# Python SDK for Alice Blue API V2
 
-The Official Python library for communicating with the Alice Blue APIs.
+The Python library for communicating with the Alice Blue APIs.
 
 Alice Blue Python library provides an easy to use wrapper over the HTTPS APIs.
 
@@ -15,7 +15,7 @@ The HTTP calls have been converted to methods and JSON responses are wrapped int
 This module is installed via:
 
 ```
-# Copy Code file and put in the same directory where you want to import
+# Download "AliceBlue.py" file and put in the same directry where your working code is stored
 ```
 
 ### Prerequisites
