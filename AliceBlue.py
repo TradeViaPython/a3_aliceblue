@@ -1,3 +1,17 @@
+import os
+try:
+    import requests
+except ImportError:
+    os.system('python -m pip install requests')
+try:
+    import pandas
+except ImportError:
+    os.system('python -m pip install pandas')
+try:
+    import websocket
+except ImportError:
+    os.system('python -m pip install websocket-client')
+
 
 import json
 import requests
@@ -5,11 +19,11 @@ import threading
 import websocket
 import logging
 import hashlib
-import time
 import pandas as pd
 from time import sleep
 from collections import namedtuple
 import dateutil.parser
+import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +109,7 @@ class Alice:
 
         # websocket
         "ws_root_url": "wss://ws1.aliceblueonline.com/NorenWS/",
-        "ws_CreateSession": "/ws/createWsSession",
+        "ws_CreateSession": "ws/createSocketSess",   # But in API  DOCS "/ws/createWsSession" Not working
         "ws_InvalidateSession": "/ws/invalidateSocketSess"
     }
 
@@ -113,71 +127,46 @@ class Alice:
         self.__on_open = None
         self.__subscribe_callback = None
         self.__order_update_callback = None
-        self.__subscribes = []
+        self.__subscribes = {}
         self.root_url = self._root_url
 
         self.api_name = "TradeViaPython"
         self.version = "1.0.0"
 
-    def _user_agent(self):
-        return self.api_name + self.version
-
-    def _user_authorization(self):
-        if self.session_id:
-            return "Bearer " + self.user_id.upper() + " " + self.session_id
-        else:
-            return ""
-
-    def _get(self, sub_url, data=None):
-        url = self.root_url + self._sub_urls[sub_url]
-        return self._request(url, "GET", data=data)
-
-    def _request(self, method, req_type, data=None):
-        """
-        Headers with authorization. For some requests authorization
-        is not required. It will be send as empty String
-        """
-        _headers = {
+    def _request(self, sub_url, req_type, data=None):
+        headers = {
             "X-SAS-Version": "2.0",
-            "User-Agent": self._user_agent(),
-            "Authorization": self._user_authorization()
+            "User-Agent": self.api_name + self.version,
+            "Authorization": "Bearer " + self.user_id.upper() + " " + (self.session_id if bool(self.session_id) else ""),
+            'Content-Type': 'application/json'
         }
-        if req_type == "POST":
-            try:
-                response = requests.post(method, json=data, headers=_headers, )
-            except (requests.ConnectionError, requests.Timeout) as exception:
-                return {'stat': 'Not_ok', 'emsg': 'Please Check the Internet connection.', 'encKey': None}
-            if response.status_code == 200:
-                return json.loads(response.text)
-            else:
-                emsg=str(response.status_code)+' - '+response.reason
-                return {'stat': 'Not_ok', 'emsg': emsg, 'encKey': None}
-
-        elif req_type == "GET":
-            try:
-                response = requests.get(method, json=data, headers=_headers)
-            except (requests.ConnectionError, requests.Timeout) as exception:
-                return {'stat': 'Not_ok', 'emsg': 'Please Check the Internet connection.', 'encKey': None}
+        try:
+            if req_type == "GET":
+                response = requests.get(self.root_url + self._sub_urls[sub_url], json=data, headers=headers, )
+            if req_type == "POST":
+                response = requests.post(self.root_url + self._sub_urls[sub_url], json=data, headers=headers, )
+        except (requests.ConnectionError, requests.Timeout) as exception:
+            raise Exception("Check Your Internet Connection")
+        if response.status_code == 200:
             return json.loads(response.text)
+        else:
+            raise Exception(f"{response.status_code} : {response.reason}")
 
-    def _post(self, sub_url, data=None):
-        """Post method declaration"""
-        url = self.root_url + self._sub_urls[sub_url]
-        return self._request(url, "POST", data=data)
-
-    def get_session_id(self, data=None):
+    def create_session(self):
         data = {'userId': self.user_id.upper()}
-        response = self._post("ApiEncryptionKey", data)
+        response = self._request("ApiEncryptionKey", "POST", data)
         if response['encKey'] is None:
-            return response['emsg']
+            raise Exception(response["emsg"])
         else:
             data = hashlib.sha256((self.user_id.upper() + self.api_key + response['encKey']).encode()).hexdigest()
         data = {'userId': self.user_id.upper(), 'userData': data}
-        res = self._post("SessionId", data)
+        response = self._request("SessionId", "POST", data)
 
-        if res['stat'] == 'Ok':
-            self.session_id = res['sessionID']
-        return res
+        if response['stat'] == 'Ok':
+            self.session_id = response['sessionID']
+            return response
+        else:
+            raise Exception(response["emsg"])
 
     def __ws_run_forever(self):
         while self.__stop_event.is_set() is False:
@@ -217,7 +206,7 @@ class Alice:
         # self.__resubscribe()
 
     def __on_error_callback(self, ws=None, error=None):
-        if (type(ws) is not websocket.WebSocketApp):  # This workaround is to solve the websocket_client's compatiblity issue of older versions. ie.0.40.0 which is used in upstox. Now this will work in both 0.40.0 & newer version of websocket_client
+        if type(ws) is not websocket.WebSocketApp:  # This workaround is to solve the websocket_client's compatiblity issue of older versions. ie.0.40.0 which is used in upstox. Now this will work in both 0.40.0 & newer version of websocket_client
             error = ws
         if self.__on_error:
             self.__on_error(error)
@@ -229,20 +218,22 @@ class Alice:
         # print(continue_flag)
         res = json.loads(message)
 
-        if (self.__subscribe_callback is not None):
+        if self.__subscribe_callback is not None:
             if res['t'] == 'tk' or res['t'] == 'tf':
+                res["ts"] = self.__subscribes[f"{res['e']}|{res['tk']}"]
                 self.__subscribe_callback(res)
                 return
             if res['t'] == 'dk' or res['t'] == 'df':
+                res["ts"] = self.__subscribes[f"{res['e']}|{res['tk']}"]
                 self.__subscribe_callback(res)
                 return
 
-        if (self.__on_error is not None):
+        if self.__on_error is not None:
             if res['t'] == 'ck' and res['s'] != 'OK':
                 self.__on_error(res)
                 return
 
-        if (self.__order_update_callback is not None):
+        if self.__order_update_callback is not None:
             if res['t'] == 'om':
                 self.__order_update_callback(res)
                 return
@@ -253,32 +244,19 @@ class Alice:
                 return
 
     def invalidate_socket_session(self):
-        url = self._root_url + self._sub_urls["ws_InvalidateSession"]
-        headers = {
-            'Authorization': 'Bearer ' + self.user_id + ' ' + self.session_id,
-            'Content-Type': 'application/json'
-        }
-        payload = {"loginType": "API"}
-        datas = json.dumps(payload)
-        response = requests.request("POST", url, headers=headers, data=datas)
-        return response.json()
+        response = self._request("ws_InvalidateSession", "POST", data={"loginType": "API"})
+        return response
 
     def create_socket_session(self):
-        url = self._root_url + self._sub_urls["ws_CreateSession"]
-        headers = {
-            'Authorization': 'Bearer ' + self.user_id + ' ' + self.session_id,
-            'Content-Type': 'application/json'
-        }
-        payload = {"loginType": "API"}
-        datas = json.dumps(payload)
-        response = requests.request("POST", url, headers=headers, data=datas)
-        return response.json()
+        response = self._request("ws_CreateSession", "POST", data={"loginType": "API"})
+        return response
 
     def start_websocket(self, subscribe_callback=None,
                         order_update_callback=None,
                         socket_open_callback=None,
                         socket_close_callback=None,
-                        socket_error_callback=None):
+                        socket_error_callback=None,
+                        run_in_background=False):
         """ Start a websocket connection for getting live data """
         self.__on_open = socket_open_callback
         self.__on_disconnect = socket_close_callback
@@ -299,10 +277,12 @@ class Alice:
         # th = threading.Thread(target=self.__send_heartbeat)
         # th.daemon = True
         # th.start()
-        # if run_in_background is True:
-        self.__ws_thread = threading.Thread(target=self.__ws_run_forever)
-        self.__ws_thread.daemon = True
-        self.__ws_thread.start()
+        if run_in_background is True:
+            self.__ws_thread = threading.Thread(target=self.__ws_run_forever)
+            self.__ws_thread.daemon = True
+            self.__ws_thread.start()
+        else:
+            self.__ws_run_forever()
 
     def close_websocket(self):
         if self.__websocket_connected == False:
@@ -320,13 +300,13 @@ class Alice:
                 i.exchange, i.token
             except:
                 continue
-            self.__subscribes.append(f"{i.exchange}|{i.token}")
+            self.__subscribes[f"{i.exchange}|{i.token}"] = f"{i.symbol}"
         values = ""
-        for i in self.__subscribes:
+        for i in list(self.__subscribes.keys()):
             values += f"{i}#"
         self.__ws_send(json.dumps({
             "k": values[:-1],
-            "t": 't'
+            "t": 'd'
         }))
 
     def unsubscribe(self, instrument):
@@ -340,41 +320,41 @@ class Alice:
                 except:
                     continue
             i = f"{i.exchange}|{i.token}"
-            if i in self.__subscribes:
+            if i in self.__subscribes.keys():
                 values += f"{i}#"
-                self.__subscribes.remove(i)
+                del self.__subscribes[i]
         self.__ws_send(json.dumps({
             "k": values[:-1],
-            "t": 'u'
+            "t": 'ud'
         }))
 
     def get_scrip_details(self, instrument):
         try:
             instrument.exchange, instrument.token
         except:
-            return {'stat': 'Not_Ok', 'emsg': 'Provide Valid Instrument'}
-        return self._post("ScripDetails", {"exch":str(instrument.exchange),"symbol":str(instrument.token)})
+            raise Exception('Provide Valid Instrument')
+        return self._request("ScripDetails", "POST", data={"exch":str(instrument.exchange), "symbol":str(instrument.token)})
 
     def get_trade_book(self):
-        return self._get("TradeBook")
+        return self._request("TradeBook", "GET")
 
     def get_profile(self):
-        return self._get("AccountDetails")
+        return self._request("AccountDetails", "GET")
 
     def get_balance(self):
-        return self._get("GetLimits")
+        return self._request("GetLimits", "GET")
 
     def get_holdings(self):
-        return self._get("Holdings")
+        return self._request("Holdings", "GET")
 
     def get_orderbook(self):
-        return self._get("OrderBook")
+        return self._request("OrderBook", "GET")
 
     def get_order_history(self, nestOrderNumber):
         if nestOrderNumber == '':
-            return self._get("OrderBook")
+            return self._request("OrderBook", "GET")
         else:
-            return self._get("OrderHistory", {'nestOrderNumber': nestOrderNumber})
+            return self._request("OrderHistory", "GET", {'nestOrderNumber': nestOrderNumber})
 
     def place_order(self, transaction_type, instrument, quantity, price_type,
                     product_type, price=0.0, trigger_price=None,
@@ -415,10 +395,10 @@ class Alice:
                  "trigPrice": trigger_price,
                  "orderTag": order_tag,
                  'complexty': complexty}]
-        return self._post("PlaceOrder", data)
+        return self._request("PlaceOrder", "POST", data)
 
     def cancel_order(self, instrument, nestOrderNumber):
-        return self._post("CancelOrder", {'exch': instrument.exchange,
+        return self._request("CancelOrder", "POST", {'exch': instrument.exchange,
                                           'nestOrderNumber': nestOrderNumber,
                                           'trading_symbol': instrument.symbol})
 
@@ -454,15 +434,16 @@ class Alice:
                 'trigPrice': trigger_price,
                 'transtype': transaction_type,
                 'pCode': product_type}
-        return self._post("ModifyOrder", data)
+        return self._request("ModifyOrder", "POST", data)
 
     def exit_bracket_order(self, nestOrderNumber, symbolOrderId, status, ):
-        return self._post("ExitBracketOrder", {'nestOrderNumber': nestOrderNumber,
-                                               'symbolOrderId': symbolOrderId,
-                                               'status': status, })
+        return self._request("ExitBracketOrder", "POST",
+                             {'nestOrderNumber': nestOrderNumber,
+                              'symbolOrderId': symbolOrderId,
+                              'status': status, })
 
-    def get_positions(self, position, ):
-        return self._post("PositionBook", {'ret': position, })
+    def get_positions(self, position=POSITION_DAYWISE, ):
+        return self._request("PositionBook", "POST", {'ret': position, })
 
     def place_basket_order(self, orders):
         data = []
@@ -499,7 +480,8 @@ class Alice:
                              'complexty': complexty}
 
             data.append(request_data)
-        return self._post("PlaceOrder", data)
+        order = self._request("PlaceOrder", "POST", data)
+        return order
 
     def get_master_contract(self, exchange=None):
         if self.master_contract is None:
@@ -515,53 +497,69 @@ class Alice:
                     self.master_contract.columns = self.master_contract.columns.str.title()
             self.master_contract = self.master_contract[self.master_contract["Exch"] != ""]
             self.master_contract["Expiry Date"] = self.master_contract["Expiry Date"].apply(lambda x: dateutil.parser.parse(str(x)).date() if str(x).strip() != "nan" and bool(x) else x)
+            self.master_contract = self.master_contract.rename(columns={"Exch": "exchange", "Symbol": "name", "Token": "instrument_token", "Trading Symbol": "trading_symbol", "Instrument Type": "segment", "Lot Size": "lot_size", "Strike Price": "strike", "Option Type": "instrument_type", "Expiry Date": "expiry"})
+            self.master_contract = self.master_contract[["exchange", "name", "instrument_token", "segment", "expiry", "instrument_type", "strike", "lot_size", "trading_symbol"]]
             print("Complected")
         if exchange is None:
             return self.master_contract
         else:
-            contract = self.master_contract[self.master_contract['Exch'] == exchange]
+            contract = self.master_contract[self.master_contract['exchange'] == exchange]
             if len(contract) == 0:
-                return {"stat": "Not_ok", "emsg": "Provide valid data"}
+                raise Exception("Provide valid data")
             else:
                 return contract
 
-    def get_instrument_by_symbol(self, exchange, trading_symbol):
+    def get_instrument_by_symbol(self, exchange, symbol):
         if self.master_contract is None:
-            return {"stat": "Not_ok", "emsg": "Download Master Contract First"}
-        contract = self.master_contract[self.master_contract['Exch'] == exchange]
-        contract = contract[contract["Trading Symbol"] == trading_symbol]
+            raise Exception("Download Master Contract First")
+        contract = self.master_contract[self.master_contract['exchange'] == exchange]
+        contract = contract[contract["trading_symbol"] == symbol]
         if len(contract) == 0:
-            return {"stat": "Not_ok", "emsg": "Provide valid data"}
-        return Instrument(list(contract['Exch'])[0], list(contract['Token'])[0],
-                          list(contract['Trading Symbol'])[0], list(contract['Symbol'])[0],
-                          list(contract['Expiry Date'])[0], list(contract['Lot Size'])[0])
+            raise Exception("Provide valid data")
+        return Instrument(list(contract['exchange'])[0], list(contract['instrument_token'])[0],
+                          list(contract['trading_symbol'])[0], list(contract['name'])[0],
+                          list(contract['expiry'])[0], list(contract['lot_size'])[0])
 
     def get_instrument_by_token(self, exchange, token):
         if self.master_contract is None:
-            return {"stat": "Not_ok", "emsg": "Download Master Contract First"}
-        contract = self.master_contract[self.master_contract['Exch'] ==  "NSE" if exchange == self.EXCHANGE_INDICES else exchange]
-        contract = contract[contract["Token"] == token]
+            raise Exception("Download Master Contract First")
+        contract = self.master_contract[self.master_contract['exchange'] == exchange]
+        contract = contract[contract["instrument_token"] == float(token)]
         if len(contract) == 0:
-            return {"stat": "Not_ok", "emsg": "Provide valid data"}
-        return Instrument(list(contract['Exch'])[0], list(contract['Token'])[0],
-                          list(contract['Trading Symbol'])[0], list(contract['Symbol'])[0],
-                          list(contract['Expiry Date'])[0], list(contract['Lot Size'])[0])
+            raise Exception("Provide valid data")
+        return Instrument(list(contract['exchange'])[0], list(contract['instrument_token'])[0],
+                          list(contract['trading_symbol'])[0], list(contract['name'])[0],
+                          list(contract['expiry'])[0], list(contract['lot_size'])[0])
 
-    def get_instrument_for_fno(self, exchange, symbol_name, expiry_date, is_fut=True, strike=None, is_CE=False):
+    def get_instrument_for_fno(self, exchange, name, expiry_date, is_fut=True, strike=None, is_CE=False):
         if self.master_contract is None:
-            return {"stat": "Not_ok", "emsg": "Download Master Contract First"}
-        contract = self.master_contract[self.master_contract['Exch'] == exchange]
-        contract = contract[contract["Symbol"] == symbol_name]
-        contract = contract[contract["Expiry Date"] == expiry_date]
-        if bool(is_fut) or bool(is_CE):
-            contract = contract[contract["Option Type"] == "XX" if bool(is_fut) else ("CE" if bool(is_CE) else "PE")]
-            if bool(is_CE):
-                contract = contract[contract["Strike Price"] == strike]
-        if len(contract) == 0:
-            return {"stat": "Not_ok", "emsg": "Provide valid data to get particular Instrument"}
+            raise Exception("Download Master Contract First")
+        contract = self.master_contract[self.master_contract['exchange'] == exchange]
+        contract = contract[contract["name"] == name]
+        contract = contract[contract["expiry"] == expiry_date]
+        contract = contract[contract["instrument_type"] == ("XX" if bool(is_fut) else ("CE" if bool(is_CE) else "PE"))]
+        if strike is not None and not bool(is_fut):
+            contract = contract[contract["strike"] == float(strike)]
+        if len(contract) == 0 or len(contract) > 1:
+            raise Exception("Provide valid data to get particular Instrument")
         else:
-            return Instrument(list(contract['Exch'])[0], list(contract['Token'])[0],
-                              list(contract['Trading Symbol'])[0], list(contract['Symbol'])[0],
-                              list(contract['Expiry Date'])[0], list(contract['Lot Size'])[0])
+            return Instrument(list(contract['exchange'])[0], list(contract['instrument_token'])[0],
+                          list(contract['trading_symbol'])[0], list(contract['name'])[0],
+                          list(contract['expiry'])[0], list(contract['lot_size'])[0])
 
+    def get_historical(self, instrument, from_datetime, to_datetime, interval, indices=False):
+        # intervals = ["1", "2", "3", "4", "5", "10", "15", "30", "60", "120", "180", "240", "D", "1W", "1M"]
+        params = {"symbol": instrument.token,
+                  "exchange": instrument.exchange if not indices else f"{instrument.exchange}::index",
+                  "from": str(int(from_datetime.timestamp())),
+                  "to": str(int(to_datetime.timestamp())),
+                  "resolution": interval,
+                  "user": self.user_id}
+        lst = requests.get(
+            f"https://a3.aliceblueonline.com/rest/AliceBlueAPIService/chart/history?", params=params).json()
+        df = pd.DataFrame(lst)
+        df = df.rename(columns={'t': 'datetime', 'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'v': 'volume'})
+        df = df[['datetime', 'open', 'high', 'low', 'close', 'volume']]
+        df["datetime"] = df["datetime"].apply(lambda x: datetime.datetime.fromtimestamp(x))
+        return df
 
