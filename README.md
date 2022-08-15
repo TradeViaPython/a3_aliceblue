@@ -131,7 +131,7 @@ order = alice.place_order(transaction_type=alice.TRANSACTION_TYPE_BUY,
                           square_off=None,
                           trailing_sl=None,
                           validity=alice.VALIDITY_DAY,
-                          complexty=alice.COMPLEXTY_BO,      # COMPLEXTY.AMO  for AMO order
+                          complexty=alice.COMPLEXTY_BO,      # COMPLEXTY_AMO  for AMO order
                           order_tag="TradeViaPython")
 print(order)
 
