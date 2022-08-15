@@ -52,7 +52,7 @@ from AliceBlue_V2 import Alice
 
 alice = Alice(user_id=user_id, api_key=api_key)
 print(alice.create_session())       # Must "log in" to Alice platform before create session
-alice.get_master_contract()         # Download initially
+alice.download_master_contract(to_csv=True)         # Download initially once a day
 
 ########################################################################
 # Basic API Calls
