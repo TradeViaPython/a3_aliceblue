@@ -8,17 +8,17 @@ Alice Blue Python library provides an easy to use wrapper over the HTTPS APIs.
 The HTTP calls have been converted to methods and JSON responses are wrapped into Python-compatible objects.
 
 * __Author: [TradeViaPython](https://www.youtube.com/c/TradeViaPython)__
-* **Current Version: 1.0.0**
+* **Current Version: 1.0.1**
 
 ## Installation
 
 This module is installed via:
 
 ```
-# Go to "dist" folder and download "AliceBlue_V2-1.0.0-py2.py3-none-any.whl" file
+# Go to "dist" folder and download "AliceBlue_V2-1.0.1-py2.py3-none-any.whl" file
 # In terminal go to the downloaded file location and install using
 
-# "pip install AliceBlue_V2-1.0.0-py2.py3-none-any.whl"
+# "pip install AliceBlue_V2-1.0.1-py2.py3-none-any.whl"
 ```
 
 ### Prerequisites
