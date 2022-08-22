@@ -26,10 +26,6 @@ pip install AliceBlue_V2-1.0.1-py2.py3-none-any.whl
 Python >=3.7
 
 
-* `requests`
-* `pandas`
-* `websocket_client`
-
 ## Getting started with API
 
 ### REST Documentation
